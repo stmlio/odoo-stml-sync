@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Global rule: a user only ever sees (and therefore replays) their own
+         operations. No groups → global, applies to every non-superuser. -->
+    <record id="stml_sync_operation_rule_own" model="ir.rule">
+        <field name="name">stml.sync.operation: own operations only</field>
+        <field name="model_id" ref="model_stml_sync_operation"/>
+        <field name="domain_force">[('user_id', '=', user.id)]</field>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="True"/>
+        <field name="perm_create" eval="True"/>
+        <field name="perm_unlink" eval="True"/>
+    </record>
+</odoo>
