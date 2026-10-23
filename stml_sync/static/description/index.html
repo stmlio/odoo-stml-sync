@@ -1,0 +1,108 @@
+<section class="oe_container">
+    <div class="oe_row oe_spaced">
+        <div class="oe_span12">
+            <h2 class="oe_slogan">STML Sync</h2>
+            <h3 class="oe_slogan">Transactional batch upserts for integrations that write a lot of records</h3>
+        </div>
+        <div class="oe_span12 text-center">
+            <img class="oe_picture oe_screenshot" src="banner.png" alt="STML Sync" style="max-width: 100%;">
+        </div>
+    </div>
+</section>
+
+<section class="oe_container oe_dark">
+    <div class="oe_row oe_spaced">
+        <div class="oe_span12">
+            <h2 class="oe_slogan">One round-trip per batch, one savepoint per record</h2>
+            <p class="oe_mt32">
+                Integration tools that push data into Odoo over RPC usually pay one HTTP round-trip
+                per record. STML Sync adds a single server-side method that creates or updates up to
+                1,000 records of one model in one call. Every record runs in its own database
+                savepoint: a row that fails validation or access control is rolled back and reported
+                by position, while the other rows of the same batch are committed together.
+            </p>
+            <p>
+                Measured on Odoo 19 with 2,000 products: re-running a sync where half the prices
+                changed took 4 seconds through the module against 30 seconds record by record.
+            </p>
+        </div>
+    </div>
+</section>
+
+<section class="oe_container">
+    <div class="oe_row oe_spaced">
+        <div class="oe_span12">
+            <h2 class="oe_slogan">What the module exposes</h2>
+        </div>
+        <div class="oe_span6">
+            <h3>ping()</h3>
+            <p>
+                Returns the module version, the Odoo version and the list of supported capabilities,
+                so a client can detect the module and fall back to stock RPC when it is absent.
+            </p>
+        </div>
+        <div class="oe_span6">
+            <h3>batch_upsert(model, records, options)</h3>
+            <p>
+                Takes a list of records, each with an optional <code>id</code> (update) or none
+                (create), ORM-ready <code>values</code>, and an optional <code>xml_id</code> that is
+                created or repaired for the record. Returns one result per record with the record id
+                and the action taken: created, updated, skipped or error.
+            </p>
+        </div>
+    </div>
+    <div class="oe_row oe_spaced">
+        <div class="oe_span4">
+            <h3>Skip unchanged rows</h3>
+            <p>
+                With <code>skip_unchanged</code> the server compares the submitted values with the
+                stored ones and leaves records that would not change untouched, so write dates and
+                chatter stay clean.
+            </p>
+        </div>
+        <div class="oe_span4">
+            <h3>Safe retries</h3>
+            <p>
+                Each call carries a client-minted <code>operation_id</code>. A retry after a timeout
+                returns the stored result of the first attempt instead of creating duplicates.
+            </p>
+        </div>
+        <div class="oe_span4">
+            <h3>Clear errors</h3>
+            <p>
+                Failures are classified as ValidationError, AccessError, MissingError, UserError,
+                IntegrityError or Other, with Odoo's own message, so the caller can decide what to
+                retry and what to report.
+            </p>
+        </div>
+    </div>
+</section>
+
+<section class="oe_container oe_dark">
+    <div class="oe_row oe_spaced">
+        <div class="oe_span12">
+            <h2 class="oe_slogan">Security and data</h2>
+            <ul>
+                <li>Every call runs as the authenticated user. Access rights and record rules apply unchanged; the module never uses sudo.</li>
+                <li>No data leaves your Odoo server. The module makes no outbound requests and needs no account or key.</li>
+                <li>The idempotency ledger stores result summaries only (record ids, actions, error text), never the submitted values. Users only see their own entries, and a daily job removes entries older than seven days.</li>
+                <li>No UI, no menus, no settings. Install it and it is ready.</li>
+            </ul>
+        </div>
+    </div>
+</section>
+
+<section class="oe_container">
+    <div class="oe_row oe_spaced">
+        <div class="oe_span12">
+            <h2 class="oe_slogan">Compatibility</h2>
+            <p>
+                Odoo 16, 18 and 19, Community and Enterprise, on-premise or on Odoo.sh. Depends on
+                <code>base</code> only. Built for the STML sync engine, but any RPC client can call it.
+            </p>
+            <p>
+                Questions: <a href="mailto:info@stml.io">info@stml.io</a>
+            </p>
+        </div>
+    </div>
+</section>

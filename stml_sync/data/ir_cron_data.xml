@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Daily ledger GC. Runs as the system user so the per-user record rule
+         does not hide other users' rows from it (the only place the module
+         acts as anyone but the caller, and it is a delete of its own
+         bookkeeping). numbercall (Odoo 16 only) is set by post_init_hook. -->
+    <record id="ir_cron_gc_operations" model="ir.cron">
+        <field name="name">STML Sync: purge operation ledger (older than 7 days)</field>
+        <field name="model_id" ref="model_stml_sync_operation"/>
+        <field name="state">code</field>
+        <field name="code">model._gc_operations()</field>
+        <field name="user_id" ref="base.user_root"/>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+        <field name="active" eval="True"/>
+    </record>
+</odoo>
