@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="STML Sync">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#262626"/><stop offset="1" stop-color="#0f0f0f"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="26" fill="url(#bg)"/>
+  <!-- a batch of record rows -->
+  <g fill="#f2f2f2">
+    <rect x="22" y="30" width="52" height="10" rx="5"/>
+    <rect x="22" y="48" width="40" height="10" rx="5" opacity="0.8"/>
+    <rect x="22" y="66" width="46" height="10" rx="5" opacity="0.65"/>
+    <rect x="22" y="84" width="34" height="10" rx="5" opacity="0.5"/>
+  </g>
+  <!-- one arrow carrying them all -->
+  <g fill="none" stroke="#fbbf24" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M86 40 V88"/>
+    <path d="M72 74 L86 88 L100 74"/>
+  </g>
+</svg>
