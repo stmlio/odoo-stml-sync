@@ -4,6 +4,7 @@ Contract:
 
     ping() -> {module_version, odoo_version, capabilities}
     batch_upsert(*, model, records, options=None) -> {module_version, replayed, results}
+    batch_reconcile(*, groups, options=None) -> {module_version, results}
 
 Design rules, in order of importance:
 
@@ -14,7 +15,7 @@ Design rules, in order of importance:
   the request.
 * No server-side matching and no mapping logic: the engine sends a resolved
   ``id`` (update) or ``None`` (create) and ORM-ready ``values``.
-* Keyword-only parameters: Odoo 19's json2 transport binds kwargs only.
+* Keyword-only parameters: the json2 transport (Odoo 19+) binds kwargs only.
 """
 
 import json
@@ -31,9 +32,14 @@ from odoo.exceptions import (
     ValidationError,
 )
 
-MODULE_VERSION = "1.0.1"
-CAPABILITIES = ["batch_upsert", "skip_unchanged", "xml_id", "idempotency"]
+MODULE_VERSION = "1.1.0"
+CAPABILITIES = ["batch_upsert", "skip_unchanged", "xml_id", "idempotency", "batch_reconcile"]
 MAX_RECORDS = 1000
+MAX_GROUPS = 1000
+# Groups per ``_reconcile_plan`` savepoint (Odoo 17+). One prefetch and one
+# balance check per chunk; a failing chunk is bisected, so a bad group costs
+# about log2(chunk) extra plan calls, not the whole batch.
+PLAN_CHUNK = 50
 MAX_ERROR_CHARS = 2000
 MAX_OPERATION_ID_CHARS = 128
 
@@ -217,6 +223,116 @@ class StmlSync(models.AbstractModel):
         Ledger.flush_model()
 
         return {"module_version": MODULE_VERSION, "replayed": False, "results": results}
+
+    # --------------------------------------------------- batch_reconcile
+
+    @api.model
+    def batch_reconcile(self, *, groups, options=None):
+        """Reconcile up to MAX_GROUPS groups of ``account.move.line`` ids in
+        one call, each group isolated: a group that fails is rolled back to
+        its savepoint and reported, the others commit with the request.
+
+        ``groups``: ``[{"index": i, "line_ids": [..]}, ...]`` — each group the
+        lines of ONE settlement (a document's receivable or payable line plus
+        the lines of the entries that settle it): same account and partner,
+        posted, unreconciled — exactly what ``account.move.line.reconcile``
+        takes. Returns ``{module_version, results}`` with one
+        ``{index, action: "reconciled" | "error", error?, error_class?}`` per
+        group, in input order.
+
+        Odoo 17+ reconciles a chunk of groups through ``_reconcile_plan``
+        (one prefetch and one balance check per chunk instead of per group);
+        a failing chunk is bisected down to single groups, which run through
+        ``reconcile()`` in their own savepoint. Odoo 16 has no plan API and
+        takes the per-group path directly.
+
+        No idempotency ledger: a retried group fails on Odoo's own "already
+        reconciled" check, and the caller reads the lines' ``reconciled``
+        flag before sending, so a replay is cheap and harmless."""
+        options = options or {}
+        if not isinstance(options, dict):
+            raise UserError("options must be a mapping")
+        if "account.move.line" not in self.env:
+            raise UserError("batch_reconcile needs the Accounting app (account) installed")
+        if not isinstance(groups, (list, tuple)):
+            raise UserError("groups must be a list")
+        if len(groups) > MAX_GROUPS:
+            raise UserError(
+                "Too many groups: %d (max %d per call). Split the batch." % (len(groups), MAX_GROUPS)
+            )
+        Line = self.env["account.move.line"]
+        results = [None] * len(groups)
+        positions = []
+        for i, group in enumerate(groups):
+            if self._group_line_ids(group) is None:
+                results[i] = {
+                    "index": self._group_index(group, i),
+                    "action": "error",
+                    "error": "a group is {index, line_ids: [int, int, ...]} with at least two line ids",
+                    "error_class": "UserError",
+                }
+            else:
+                positions.append(i)
+        if hasattr(Line, "_reconcile_plan"):
+            for start in range(0, len(positions), PLAN_CHUNK):
+                self._reconcile_plan_group(Line, groups, positions[start:start + PLAN_CHUNK], results)
+        for i in positions:
+            if results[i] is None:
+                results[i] = self._reconcile_one(Line, groups[i], i)
+        return {"module_version": MODULE_VERSION, "results": results}
+
+    @staticmethod
+    def _group_index(group, position):
+        return group.get("index", position) if isinstance(group, dict) else position
+
+    @staticmethod
+    def _group_line_ids(group):
+        """The group's line ids as a list of ints, or None when malformed."""
+        if not isinstance(group, dict):
+            return None
+        ids = group.get("line_ids")
+        if not isinstance(ids, (list, tuple)) or len(ids) < 2:
+            return None
+        out = []
+        for v in ids:
+            if isinstance(v, bool) or not isinstance(v, int):
+                return None
+            out.append(v)
+        return out
+
+    def _reconcile_plan_group(self, Line, groups, positions, results):
+        """Reconcile ``positions`` as one ``_reconcile_plan`` in one savepoint;
+        on failure bisect, down to single groups left for ``_reconcile_one``."""
+        if len(positions) < 2:
+            return
+        try:
+            with self.env.cr.savepoint():
+                Line._reconcile_plan([Line.browse(self._group_line_ids(groups[i])) for i in positions])
+                for i in positions:
+                    results[i] = {"index": self._group_index(groups[i], i), "action": "reconciled"}
+        except Exception:  # noqa: BLE001 — bisect; the leaves report per group
+            self.env.invalidate_all(flush=False)
+            for i in positions:
+                results[i] = None
+            half = len(positions) // 2
+            self._reconcile_plan_group(Line, groups, positions[:half], results)
+            self._reconcile_plan_group(Line, groups, positions[half:], results)
+
+    def _reconcile_one(self, Line, group, position):
+        """One group, one savepoint. Never raises."""
+        index = self._group_index(group, position)
+        try:
+            with self.env.cr.savepoint():
+                Line.browse(self._group_line_ids(group)).reconcile()
+        except Exception as exc:  # noqa: BLE001 — per-group isolation
+            self.env.invalidate_all(flush=False)
+            return {
+                "index": index,
+                "action": "error",
+                "error": _error_text(exc),
+                "error_class": _error_class(exc),
+            }
+        return {"index": index, "action": "reconciled"}
 
     # --------------------------------------------------- batched creates
 

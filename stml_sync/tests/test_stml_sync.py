@@ -1,6 +1,6 @@
 """Addon unit tests for ``stml.sync``.
 
-Runs on Odoo 16, 18 and 19:
+Runs on Odoo 16 through 20:
 
     odoo -d stml_sync_test -i base,stml_sync --stop-after-init --without-demo=all
     odoo -d stml_sync_test -u stml_sync --test-tags /stml_sync --stop-after-init
@@ -69,7 +69,8 @@ class TestStmlSync(TransactionCase):
         self.assertEqual(res["module_version"], MODULE_VERSION)
         self.assertTrue(res["odoo_version"])
         self.assertEqual(
-            set(res["capabilities"]), {"batch_upsert", "skip_unchanged", "xml_id", "idempotency"}
+            set(res["capabilities"]),
+            {"batch_upsert", "skip_unchanged", "xml_id", "idempotency", "batch_reconcile"},
         )
 
     def test_manifest_version_matches_constant(self):
@@ -77,6 +78,23 @@ class TestStmlSync(TransactionCase):
         with open(path, encoding="utf-8") as fh:
             manifest = ast.literal_eval(fh.read())
         self.assertEqual(manifest["version"], MODULE_VERSION)
+
+    def test_batch_reconcile_validation(self):
+        # The test database carries base only; with Accounting absent the call
+        # refuses cleanly, with it present the shape checks run before any ORM
+        # access so malformed groups come back as per-group errors.
+        if "account.move.line" not in self.env:
+            with self.assertRaises(UserError):
+                self.sync_bob.batch_reconcile(groups=[{"index": 0, "line_ids": [1, 2]}])
+            return
+        with self.assertRaises(UserError):
+            self.sync_bob.batch_reconcile(groups="nope")
+        with self.assertRaises(UserError):
+            self.sync_bob.batch_reconcile(groups=[{"index": 0, "line_ids": [1, 2]}] * 1001)
+        res = self.sync_bob.batch_reconcile(groups=[{"index": 7, "line_ids": [1]}, "junk", {"line_ids": [1, True]}])
+        self.assertEqual(res["module_version"], MODULE_VERSION)
+        self.assertEqual([r["action"] for r in res["results"]], ["error", "error", "error"])
+        self.assertEqual([r["index"] for r in res["results"]], [7, 1, 2])
 
     # -------------------------------------------------- caps / validation
 
