@@ -1,13 +1,13 @@
 # Keep "version" in sync with MODULE_VERSION in models/stml_sync.py (a unit
 # test asserts they match). Odoo prefixes the series itself ("19.0.1.0.0"), so
-# one manifest serves 16, 18 and 19.
+# one manifest serves 16 through 20.
 {
     "name": "STML Sync",
     "summary": "Transactional batch upsert surface for the STML sync engine",
     "description": """
 STML Sync — companion module for the STML sync engine.
 
-Exposes two RPC methods on the abstract model ``stml.sync``:
+Exposes three RPC methods on the abstract model ``stml.sync``:
 
 * ``ping()`` — module version, Odoo version and capability flags, used by the
   engine to detect the module and fall back to stock RPC when it is absent.
@@ -16,12 +16,16 @@ Exposes two RPC methods on the abstract model ``stml.sync``:
   bad row costs one row. Optional ``xml_id`` per record, ``skip_unchanged``
   no-op detection, and an idempotency ledger (``stml.sync.operation``) that
   replays a retried ``operation_id`` instead of re-executing it.
+* ``batch_reconcile(groups=, options=)`` — up to 1000 settlements (each a
+  group of ``account.move.line`` ids) reconciled in one round-trip, each in
+  its own savepoint; on Odoo 17+ a chunk goes through the reconciliation
+  plan API in one pass.
 
 Everything runs as the calling user: access rights and record rules apply
 unchanged, there is no ``sudo()`` anywhere, and the ledger never stores the
 submitted values.
 """,
-    "version": "1.0.1",
+    "version": "1.1.0",
     "category": "Technical",
     "license": "LGPL-3",
     "author": "STML",

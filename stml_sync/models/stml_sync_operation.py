@@ -35,7 +35,7 @@ class StmlSyncOperation(models.Model):
     record_count = fields.Integer(string="Records", readonly=True)
     result_json = fields.Text(string="Results (JSON)", required=True, readonly=True)
 
-    # Odoo 19 dropped `_sql_constraints` in favour of table objects; 16/18
+    # Odoo 19+ dropped `_sql_constraints` in favour of table objects; 16-18
     # only know the list form. Same constraint name on every series.
     if hasattr(models, "Constraint"):
         _name_uniq = models.Constraint("UNIQUE(name)", _UNIQUE_MSG)
