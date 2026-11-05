@@ -1,0 +1,4 @@
+id,name,model_id,group_id/id,operation,domain
+access_stml_sync_operation_user,stml.sync.operation user,stml.sync.operation,base.group_user,cr,
+access_stml_sync_operation_system,stml.sync.operation system,stml.sync.operation,base.group_system,crd,
+stml_sync_operation_rule_own,stml.sync.operation: own operations only,stml.sync.operation,,crud,"[('user_id', '=', user.id)]"
